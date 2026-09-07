@@ -178,6 +178,12 @@
   // The camera uploads a fresh frame to object storage every few seconds. This
   // page reloads it on a timer and shows the offline panel if frames stop
   // arriving, so it never claims to be live over a stalled image.
+  //
+  // "Stopped arriving" means the picture stopped changing, not that the fetch
+  // failed. When the camera died on 2026-09-07 the bucket kept serving its
+  // last frame with a 200 for ten hours, so every fetch succeeded and the page
+  // showed a night photo under a LIVE NOW badge all morning. Freshness is
+  // therefore judged on frame content.
   (function () {
     var FRAME_URL   = "https://pub-d06c872f6bd94953a10eeb340d1a72fc.r2.dev/frame.jpg";
     var REFRESH_MS  = 5000;    // how often to pull a new frame
@@ -188,7 +194,12 @@
     var statusEl  = document.getElementById("statusLine");
     var stampEl   = document.getElementById("stamp");
 
-    var lastGood = 0;
+    // Tracks when the frame last *changed*, not when a fetch last succeeded.
+    // Object storage keeps serving the last uploaded frame with a 200 long
+    // after the camera stops, so "the fetch worked" says nothing about
+    // whether the view is current.
+    var lastChanged = 0;
+    var lastSig     = null;
 
     function showLive() {
       offlineEl.style.display = "none";
@@ -209,18 +220,73 @@
       } catch (e) { stampEl.textContent = ""; }
     }
 
+    // Reduces a frame to a short string that changes whenever the picture
+    // does. The image is drawn tiny, so this costs a fraction of a
+    // millisecond and never touches the full-size pixels.
+    //
+    // The bucket sends no Access-Control-Allow-Origin header, so the canvas
+    // is tainted and getImageData() throws. Reading the header directly is
+    // blocked for the same reason. When that happens we fall back to
+    // treating every successful load as fresh, which is the old behaviour:
+    // no worse than before, and the offline panel still catches hard
+    // failures.
+    var SIG_W = 32, SIG_H = 18;
+    var sigCanvas = document.createElement("canvas");
+    sigCanvas.width = SIG_W; sigCanvas.height = SIG_H;
+    var sigCtx = sigCanvas.getContext("2d", { willReadFrequently: true });
+    var sigBlocked = false;
+
+    function signature(img) {
+      if (sigBlocked || !sigCtx) return null;
+      try {
+        sigCtx.drawImage(img, 0, 0, SIG_W, SIG_H);
+        var d = sigCtx.getImageData(0, 0, SIG_W, SIG_H).data;
+        var s = 0;
+        // Every 16th pixel (64 bytes at 4 bytes each); plenty to notice a
+        // changed scene without hashing all 576 of them.
+        for (var i = 0; i < d.length; i += 64) {
+          s = (s * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) % 4294967296;
+        }
+        return String(s);
+      } catch (e) {
+        // Tainted canvas: give up on content comparison for good.
+        sigBlocked = true;
+        return null;
+      }
+    }
+
     // Load into a detached image first so a failed fetch never blanks the
     // frame already on screen.
     function refresh() {
       var next = new Image();
+      // Deliberately NOT setting crossOrigin: the bucket sends no
+      // Access-Control-Allow-Origin header, and requesting CORS without it
+      // makes the load fail outright rather than merely tainting the canvas.
+      // A visible frame matters more than a readable one, so we take the
+      // taint and let signature() degrade gracefully.
       next.onload = function () {
-        lastGood = Date.now();
         imgEl.src = next.src;
-        showLive();
-        stamp();
+
+        var sig = signature(next);
+        if (sig === null) {
+          // Cannot compare content; treat a successful load as fresh.
+          lastChanged = Date.now();
+        } else if (sig !== lastSig) {
+          lastSig = sig;
+          lastChanged = Date.now();
+        }
+
+        if (Date.now() - lastChanged <= STALE_MS) {
+          showLive();
+          stamp();
+        } else {
+          // Loading fine, but the picture has not moved: the camera is down
+          // even though storage is still serving its last frame.
+          showOffline();
+        }
       };
       next.onerror = function () {
-        if (Date.now() - lastGood > STALE_MS) showOffline();
+        if (Date.now() - lastChanged > STALE_MS) showOffline();
       };
       // Cache busting: without this the browser serves the previous frame.
       next.src = FRAME_URL + "?t=" + Date.now();
@@ -234,7 +300,7 @@
       timer = setInterval(refresh, REFRESH_MS);
       // A frame that stops updating is as offline as one that fails to load.
       staleTimer = setInterval(function () {
-        if (lastGood && Date.now() - lastGood > STALE_MS) showOffline();
+        if (lastChanged && Date.now() - lastChanged > STALE_MS) showOffline();
       }, 5000);
     }
 

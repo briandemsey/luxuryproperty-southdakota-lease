@@ -78,9 +78,9 @@
   /* The frame itself. Opacity is eased so each refresh reads as a gentle
      update rather than a flicker.
 
-     The camera runs bright in open daylight, so the image is dimmed slightly
-     and given a little contrast. This is presentation only: the stored frame
-     is untouched, so the treatment can be changed or removed at any time. */
+     A very light touch of dimming and contrast, kept subtle so it does not
+     darken the frame further at dusk. This is presentation only: the stored
+     frame is untouched, so it can be changed or removed at any time. */
   .player-frame img {
     position: absolute;
     inset: 0;
@@ -88,7 +88,7 @@
     height: 100%;
     object-fit: cover;
     display: block;
-    filter: brightness(0.86) contrast(1.06) saturate(1.04);
+    filter: brightness(0.95) contrast(1.03) saturate(1.02);
     transition: opacity 220ms ease;
   }
   /* Offline overlay: shown when frames stop arriving. */

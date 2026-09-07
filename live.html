@@ -255,6 +255,39 @@
       }
     }
 
+    // The bucket sends no CORS header, so the canvas taints and the pixel
+    // hash is unavailable in the browser. Last-Modified is still readable on
+    // a plain (non-CORS) fetch of a same-ish resource via a HEAD request,
+    // and it is the authoritative answer to "when was this frame taken?".
+    var lastModifiedSeen = null;
+    var probeInFlight = false;
+
+    function probeModified() {
+      if (probeInFlight) return;
+      probeInFlight = true;
+      fetch(FRAME_URL + "?p=" + Date.now(), { method: "HEAD", cache: "no-store" })
+        .then(function (r) {
+          var lm = r.headers.get("Last-Modified");
+          if (!lm) {
+            // Header not visible: fall back to trusting the load, which is
+            // the old behaviour and no worse than before.
+            lastChanged = Date.now();
+            return;
+          }
+          var t = Date.parse(lm);
+          if (isNaN(t)) { lastChanged = Date.now(); return; }
+          if (lastModifiedSeen === null || t !== lastModifiedSeen) {
+            lastModifiedSeen = t;
+            lastChanged = Date.now();
+          }
+          // A frame older than the stale window is offline regardless of
+          // whether it changed while we were watching.
+          if (Date.now() - t > STALE_MS) showOffline();
+        })
+        .catch(function () { /* network blip: leave lastChanged alone */ })
+        .then(function () { probeInFlight = false; });
+    }
+
     // Load into a detached image first so a failed fetch never blanks the
     // frame already on screen.
     function refresh() {
@@ -269,8 +302,12 @@
 
         var sig = signature(next);
         if (sig === null) {
-          // Cannot compare content; treat a successful load as fresh.
-          lastChanged = Date.now();
+          // Canvas is tainted, so pixels cannot be compared. Freshness is
+          // decided by the Last-Modified probe instead; do NOT touch
+          // lastChanged here. Treating every successful load as fresh is
+          // what let a frozen frame sit under a LIVE NOW badge, because
+          // storage keeps serving the last frame with a 200 forever.
+          probeModified();
         } else if (sig !== lastSig) {
           lastSig = sig;
           lastChanged = Date.now();
@@ -296,6 +333,10 @@
 
     function start() {
       if (timer) return;
+      // Ask storage how old the current frame is before anything is judged
+      // fresh, so a page opened onto an already-frozen frame reports offline
+      // immediately instead of waiting for a change that will never come.
+      probeModified();
       refresh();
       timer = setInterval(refresh, REFRESH_MS);
       // A frame that stops updating is as offline as one that fails to load.

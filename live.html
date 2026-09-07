@@ -199,6 +199,7 @@
     // after the camera stops, so "the fetch worked" says nothing about
     // whether the view is current.
     var lastChanged = 0;
+    var lastSize = null;
     var lastSig     = null;
 
     function showLive() {
@@ -255,37 +256,31 @@
       }
     }
 
-    // The bucket sends no CORS header, so the canvas taints and the pixel
-    // hash is unavailable in the browser. Last-Modified is still readable on
-    // a plain (non-CORS) fetch of a same-ish resource via a HEAD request,
-    // and it is the authoritative answer to "when was this frame taken?".
-    var lastModifiedSeen = null;
-    var probeInFlight = false;
-
-    function probeModified() {
-      if (probeInFlight) return;
-      probeInFlight = true;
-      fetch(FRAME_URL + "?p=" + Date.now(), { method: "HEAD", cache: "no-store" })
-        .then(function (r) {
-          var lm = r.headers.get("Last-Modified");
-          if (!lm) {
-            // Header not visible: fall back to trusting the load, which is
-            // the old behaviour and no worse than before.
-            lastChanged = Date.now();
-            return;
-          }
-          var t = Date.parse(lm);
-          if (isNaN(t)) { lastChanged = Date.now(); return; }
-          if (lastModifiedSeen === null || t !== lastModifiedSeen) {
-            lastModifiedSeen = t;
-            lastChanged = Date.now();
-          }
-          // A frame older than the stale window is offline regardless of
-          // whether it changed while we were watching.
-          if (Date.now() - t > STALE_MS) showOffline();
-        })
-        .catch(function () { /* network blip: leave lastChanged alone */ })
-        .then(function () { probeInFlight = false; });
+    // Freshness without CORS.
+    //
+    // Two earlier attempts failed, both recorded here so they are not retried:
+    //  1. Hashing the pixels. The canvas taints (no Access-Control-Allow-Origin
+    //     on the bucket) and getImageData() throws, so this never ran at all.
+    //  2. Reading the Last-Modified header with fetch(). A cross-origin fetch
+    //     to a host that sends no CORS headers does not merely hide the
+    //     headers, it rejects outright with "TypeError: Failed to fetch", so
+    //     this never ran either and left the page stuck on offline.
+    //
+    // What does work on a plain <img> load is naturalWidth/naturalHeight and,
+    // usefully, the encoded byte size via PerformanceResourceTiming. A JPEG of
+    // a live scene changes size every frame, so a size that stops moving means
+    // the picture has stopped moving.
+    function encodedSize(url) {
+      try {
+        var e = performance.getEntriesByName(url);
+        if (!e || !e.length) return null;
+        var last = e[e.length - 1];
+        // encodedBodySize is zero-able on opaque responses in some browsers;
+        // transferSize still varies with the payload.
+        return last.encodedBodySize || last.transferSize || null;
+      } catch (err) {
+        return null;
+      }
     }
 
     // Load into a detached image first so a failed fetch never blanks the
@@ -302,12 +297,18 @@
 
         var sig = signature(next);
         if (sig === null) {
-          // Canvas is tainted, so pixels cannot be compared. Freshness is
-          // decided by the Last-Modified probe instead; do NOT touch
-          // lastChanged here. Treating every successful load as fresh is
-          // what let a frozen frame sit under a LIVE NOW badge, because
-          // storage keeps serving the last frame with a 200 forever.
-          probeModified();
+          // Pixels unreadable: fall back to the encoded byte size, which is a
+          // proxy for "this is a different picture". Only a size that actually
+          // changes counts as a new frame.
+          var sz = encodedSize(next.src.split("?")[0]) || encodedSize(next.src);
+          if (sz === null) {
+            // No timing entry available at all: trust the load rather than
+            // black out a working camera.
+            lastChanged = Date.now();
+          } else if (sz !== lastSize) {
+            lastSize = sz;
+            lastChanged = Date.now();
+          }
         } else if (sig !== lastSig) {
           lastSig = sig;
           lastChanged = Date.now();
@@ -333,10 +334,6 @@
 
     function start() {
       if (timer) return;
-      // Ask storage how old the current frame is before anything is judged
-      // fresh, so a page opened onto an already-frozen frame reports offline
-      // immediately instead of waiting for a change that will never come.
-      probeModified();
       refresh();
       timer = setInterval(refresh, REFRESH_MS);
       // A frame that stops updating is as offline as one that fails to load.

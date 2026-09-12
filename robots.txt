@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://luxuryproperty-southdakota.com/sitemap.xml
+Sitemap: https://lease.luxuryproperty-southdakota.com/sitemap.xml

@@ -231,6 +231,26 @@ Lines 213, 236, 257, 295, 320, 380, 407, 435, 489, 657, 682, 805, 824, 842,
 divs and the TOC's plain `<div>` at 213. Verified live: 15 present, 0
 remaining. Regression check passed on hero, lease rate, canonical.
 
+### Section VII buyer references — 2026-09-12, commit `46e3c8f`
+
+`index.html:420`, `:423`. Three instances across two lines.
+
+```
+- would place the buyer inside that jurisdiction as of closing.
++ would place the lessee inside that jurisdiction as of closing.
+
+- engaged by the buyer. A qualified buyer should retain trust, tax,
++ engaged by the lessee. A qualified lessee should retain trust, tax,
+```
+
+Verified live: both lines serve, "the buyer" and "qualified buyer" both 0 on
+the served page. Regression clean on hero, lease rate, 15 footers, TOC hint.
+
+**Left alone, flagged to Brian, not vetoed and not named:** "as of closing"
+remains in line 420, inside the sentence just edited. A lease has a
+commencement, not a closing. This is now the last sale-shaped phrasing in the
+section.
+
 ### TOC hints — 2026-09-12, commit `1fb3b18`
 
 Three hints still described a sale and disagreed with the headings they point

@@ -393,20 +393,42 @@ a live page unless Brian wants it.
 
 ### Section I, deferred items
 
-- Line 224: `offering-audio.m4a` / `.mp3`, sale narration, auto-plays on
-  entering the section. No lease recording exists.
-  **Brian is writing a new lease script (as of 2026-09-12).** The existing
-  audio is unusable on this site: the narration says "I am the one selling
-  it", "You would arrive with a suitcase", and closes on a phone number read
-  twice. It has to be re-recorded, not edited.
-  - Old sale script: `F:\CA_5_9_26\ARTICLES & LETTERS\Owner-Narrative-Script-v2-2111-Vantage-Circle.pdf`
-    (2026-08-21, "The Owner's Narrative", 2:45 target, ~440 words)
-  - Plain-text version: `C:\Users\BDEMS\Desktop\Owner-Narrative-Script-v2-2111-Vantage-Circle.txt`
-  - Useful structure to keep from it: opens on the ocean rather than the
-    address, pause cues marked inline, architecture arrives a third of the way
-    in, closes on a single call to action with silence after.
-  - Recording notes from that doc: iPhone eight inches off axis, room with soft
-    furniture, three takes, keep the third.
+- Line 224: `offering-audio.m4a` / `.mp3` - **RESOLVED 2026-09-12, commit
+  `727d9ce`.** Brian re-recorded the narration for the lease.
+
+  New take opens "Hi, my name is Brian Demsey and I built this house and I'm
+  the one **leasing** it." Transcribed and checked: no other sale vocabulary
+  anywhere in the recording.
+
+  Recorded on iPhone Voice Memos, same device and settings as the original, so
+  the format matched exactly: AAC 48kHz mono, 243.6s vs the old 244.4s. The
+  `.mp3` was re-encoded at 96k from the new `.m4a` rather than transcoded from
+  the old lossy file. Filenames unchanged, so `index.html` needed no edit.
+
+  Verified live by byte count, not just a 200: served m4a is 2,178,823 bytes,
+  matching the new local file; the old take was 2,161,844.
+
+  Old take backed up outside the repo at
+  `<scratchpad>/OLD-offering-audio.m4a` / `.mp3`. Not in git history beyond
+  the commits before `727d9ce`.
+
+  **Two things I got wrong, recorded so they are not repeated:**
+  1. I claimed the audio "has to be re-recorded, not edited" based on reading
+     the v2 script PDF, then later claimed it needed "one word changed". Both
+     were guesses about audio I had not listened to. **The recording never
+     matched that script** - the old take had a different opening ("Hi.
+     Hopefully we'll have a chance to meet in person"), said Mark Singer
+     designed the house "40 years ago" (contradicting the site's own history),
+     and contained none of the script's paddling opening. Transcribe before
+     asserting what audio says.
+  2. My regex check for a spoken phone number reported "none detected" when
+     the number **is** spoken, at 228.68s. A failed pattern match is not
+     evidence of absence.
+
+  **Still live in the recording:** Brian's cell number, 949-291-1422, spoken
+  aloud at 228.68s on a public page. The original script's own notes warned
+  about this and recommended a dedicated forwarding line. Brian is aware; his
+  call.
 - Line 271: "What conveys with the sale"
 
 ### Section VII, deferred item
